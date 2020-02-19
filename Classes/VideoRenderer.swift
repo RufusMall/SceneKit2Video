@@ -12,6 +12,7 @@ import AVFoundation
 public protocol VideoRendererDelegate: class {
     func videoRenderer(createdNewImage image: UIImage)
     func videoRenderer(progressUpdated to: Float)
+    func videoRenderer(willRenderFrame renderer: SCNRenderer, atTime: CFTimeInterval)
 }
 
 public struct VideoRendererOptions {
@@ -33,16 +34,16 @@ public class VideoRenderer {
     public weak var delegate: VideoRendererDelegate?
     
     public init() {
-
+        
     }
     
     private static var renderQueue = DispatchQueue(label: "net.colordeaf.SceneKit2Video.RenderQueue")
     private static let renderSemaphore = DispatchSemaphore(value: 3)
     
     private let frameQueue = DispatchQueue(label: "net.colordeaf.SceneKit2Video.RenderFrames")
-
+    
     public func render(scene: SCNScene, withOptions options: VideoRendererOptions, until: @escaping IsDone, andThen: @escaping RenderDone ) {
-
+        
         VideoRenderer.renderQueue.async {
             VideoRenderer.renderSemaphore.wait()
             self.doRender(scene: scene, withOptions: options, until: until) {
@@ -77,13 +78,13 @@ public class VideoRenderer {
         renderer.autoenablesDefaultLighting = true
         
         let url = FileUtil.newTempFileURL
-    
+        
         if FileUtil.fileExists(at: url) {
             FileUtil.removeFile(at: url)
         } else {
             FileUtil.mkdirUsingFile(at: url)
         }
-    
+        
         var assetWriter: AVAssetWriter
         do {
             assetWriter = try AVAssetWriter(outputURL: url, fileType: .m4v)
@@ -97,7 +98,7 @@ public class VideoRenderer {
             AVVideoWidthKey: videoSize.width,
             AVVideoHeightKey: videoSize.height
         ]
-    
+        
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         // input.expectsMediaDataInRealTime = false
         assetWriter.add(input)
@@ -118,6 +119,9 @@ public class VideoRenderer {
         
         input.requestMediaDataWhenReady(on: self.frameQueue, using: {
             
+            let snapshotTime = CFTimeInterval(intervalDuration * CFTimeInterval(frameNumber))
+            var image = renderer.snapshot(atTime: snapshotTime, with: videoSize, antialiasingMode: SCNAntialiasingMode.multisampling4X)
+            
             if until() {
                 input.markAsFinished()
                 assetWriter.finishWriting {
@@ -127,9 +131,10 @@ public class VideoRenderer {
                     return
                 }
             } else if input.isReadyForMoreMediaData, let pool = pixelBufferAdaptor.pixelBufferPool {
-                let snapshotTime = CFTimeInterval(intervalDuration * CFTimeInterval(frameNumber))
+                
+                self.delegate?.videoRenderer(willRenderFrame: renderer, atTime: snapshotTime)
+
                 let presentationTime = CMTimeMultiply(frameDuration, multiplier:  Int32(frameNumber))
-                var image = renderer.snapshot(atTime: snapshotTime, with: videoSize, antialiasingMode: SCNAntialiasingMode.multisampling4X)
                 
                 if let overlay = options.overlayImage {
                     image = image.imageByOverlaying(overlay)
@@ -152,7 +157,6 @@ public class VideoRenderer {
             } else if input.isReadyForMoreMediaData {
                 warn("VideoRenderer", String(format: "Input ready, no pixel buffer pool: %d", scene.hash))
             }
-            
         })
     }
     

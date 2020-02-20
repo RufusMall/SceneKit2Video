@@ -115,7 +115,7 @@ public class VideoRenderer {
         )
         
         assetWriter.startWriting()
-        assetWriter.startSession(atSourceTime: .zero)
+        assetWriter.startSession(atSourceTime: frameDuration)
         
         input.requestMediaDataWhenReady(on: self.frameQueue, using: {
             
@@ -132,8 +132,11 @@ public class VideoRenderer {
                 }
             } else if input.isReadyForMoreMediaData, let pool = pixelBufferAdaptor.pixelBufferPool {
                 
+                let snapshotTime = CFTimeInterval(intervalDuration * CFTimeInterval(frameNumber))
+                
                 self.delegate?.videoRenderer(willRenderFrame: renderer, atTime: snapshotTime)
-
+                var image = renderer.snapshot(atTime: snapshotTime, with: videoSize, antialiasingMode: SCNAntialiasingMode.multisampling4X)
+                
                 let presentationTime = CMTimeMultiply(frameDuration, multiplier:  Int32(frameNumber))
                 
                 if let overlay = options.overlayImage {

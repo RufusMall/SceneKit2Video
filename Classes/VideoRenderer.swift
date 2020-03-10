@@ -119,9 +119,6 @@ public class VideoRenderer {
         
         input.requestMediaDataWhenReady(on: self.frameQueue, using: {
             
-            let snapshotTime = CFTimeInterval(intervalDuration * CFTimeInterval(frameNumber))
-            var image = renderer.snapshot(atTime: snapshotTime, with: videoSize, antialiasingMode: SCNAntialiasingMode.multisampling4X)
-            
             if until() {
                 input.markAsFinished()
                 assetWriter.finishWriting {
